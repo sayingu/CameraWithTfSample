@@ -11,9 +11,15 @@
 3. [CameraX + Tensorflow Lite](https://github.com/android/camera-samples/tree/main/CameraXAdvanced)
 
 ## 추가 사항
+```kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    // 화면켜짐유지
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+}
+```
+
 ```xml
-<application
-  android:keepScreenOn="true"><!-- 화면켜짐유지 -->
+<application>
   <activity
     android:screenOrientation="portrait"> <!-- 세로화면유지 -->
   </activity>

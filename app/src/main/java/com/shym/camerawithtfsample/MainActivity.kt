@@ -4,11 +4,11 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.util.Log
 import android.util.Size
+import android.view.WindowManager
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -73,6 +73,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private lateinit var bitmapBuffer: Bitmap
@@ -136,10 +138,10 @@ class MainActivity : AppCompatActivity() {
         val textView1 = this.findViewById<TextView>(R.id.textView1)
         val textView2 = this.findViewById<TextView>(R.id.textView2)
 
-        var preview: Preview = Preview.Builder()
+        val preview: Preview = Preview.Builder()
             .build()
 
-        var cameraSelector: CameraSelector = CameraSelector.Builder()
+        val cameraSelector: CameraSelector = CameraSelector.Builder()
             .requireLensFacing(CameraSelector.LENS_FACING_BACK)
             .build()
 
@@ -180,6 +182,11 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        var camera = cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, preview, imageAnalysis)
+        var camera = cameraProvider.bindToLifecycle(
+            this as LifecycleOwner,
+            cameraSelector,
+            preview,
+            imageAnalysis
+        )
     }
 }
