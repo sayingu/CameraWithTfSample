@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.util.Size
 import android.view.WindowManager
@@ -29,6 +33,7 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp
 import org.tensorflow.lite.support.image.ops.Rot90Op
 import java.util.concurrent.Executors
+import kotlin.math.abs
 import kotlin.random.Random
 
 
@@ -39,10 +44,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
     private val executor = Executors.newSingleThreadExecutor()
 
+    private lateinit var sensorManager: SensorManager
+
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == permissionsRequestCode && hasPermissions(this)) {
@@ -68,6 +73,17 @@ class MainActivity : AppCompatActivity() {
         } else {
             bindCameraUseCases()
         }
+
+        val sensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+        sensorManager.registerListener(
+            sensorEventListener, sensor, SensorManager.SENSOR_DELAY_NORMAL
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        sensorManager.unregisterListener(sensorEventListener)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +91,42 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+        textView3 = this.findViewById<TextView>(R.id.textView3)
+    }
+
+    private val NS2S = 1.0f / 1000000000.0f
+    private var timestamp: Float = 0f
+    private var isAcceleration = false
+    private lateinit var textView3: TextView
+    private val sensorEventListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event != null) {
+                val axisX: Float = event.values[0]
+                val axisY: Float = event.values[1]
+                val axisZ: Float = event.values[2]
+
+                if (abs(axisX) >= 1 || abs(axisY) >= 1 || abs(axisZ) >= 1) {
+                    if (timestamp == 0f) {
+                        timestamp = event.timestamp.toFloat()
+                    } else {
+                        if ((event.timestamp - timestamp) * NS2S > 1) {
+                            isAcceleration = true
+                            textView3.text = "움직임"
+                        }
+                    }
+                } else {
+                    timestamp = 0f
+                    isAcceleration = false
+                    textView3.text = "멈춤"
+                }
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        }
     }
 
     private lateinit var bitmapBuffer: Bitmap
@@ -89,16 +141,11 @@ class MainActivity : AppCompatActivity() {
 
     private val tfImageProcessor by lazy {
         val cropSize = minOf(bitmapBuffer.width, bitmapBuffer.height)
-        ImageProcessor.Builder()
-            .add(ResizeWithCropOrPadOp(cropSize, cropSize))
-            .add(
-                ResizeOp(
-                    tfInputSize.height, tfInputSize.width, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR
-                )
+        ImageProcessor.Builder().add(ResizeWithCropOrPadOp(cropSize, cropSize)).add(
+            ResizeOp(
+                tfInputSize.height, tfInputSize.width, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR
             )
-            .add(Rot90Op(-imageRotationDegrees / 90))
-            .add(NormalizeOp(0f, 1f))
-            .build()
+        ).add(Rot90Op(-imageRotationDegrees / 90)).add(NormalizeOp(0f, 1f)).build()
     }
 
     private val nnApiDelegate by lazy {
@@ -114,8 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     private val detector by lazy {
         ObjectDetectionHelper(
-            tflite,
-            FileUtil.loadLabels(this, LABELS_PATH)
+            tflite, FileUtil.loadLabels(this, LABELS_PATH)
         )
     }
 
@@ -138,19 +184,16 @@ class MainActivity : AppCompatActivity() {
         val textView1 = this.findViewById<TextView>(R.id.textView1)
         val textView2 = this.findViewById<TextView>(R.id.textView2)
 
-        val preview: Preview = Preview.Builder()
-            .build()
+        val preview: Preview = Preview.Builder().build()
 
-        val cameraSelector: CameraSelector = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-            .build()
+        val cameraSelector: CameraSelector =
+            CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK).build()
 
         preview.setSurfaceProvider(previewView.surfaceProvider)
 
         val imageAnalysis = ImageAnalysis.Builder()
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
         imageAnalysis.setAnalyzer(executor, ImageAnalysis.Analyzer { image ->
             if (!::bitmapBuffer.isInitialized) {
                 // The image rotation and RGB image buffer are initialized only once
@@ -183,10 +226,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         var camera = cameraProvider.bindToLifecycle(
-            this as LifecycleOwner,
-            cameraSelector,
-            preview,
-            imageAnalysis
+            this as LifecycleOwner, cameraSelector, preview, imageAnalysis
         )
     }
 }
